@@ -140,12 +140,23 @@ jobs:
           lfs: true
           submodules: recursive
 
+      # The NDK version has to match env.NDK_VERSION, because scons looks for
+      # ${ANDROID_HOME}/ndk/<ndk_version>. Installing a different revision (the
+      # action used to install r23c) makes every android build fail with
+      # "Could not find NDK toolchain".
       - name: Android dependencies
         if: ${{ matrix.platform == 'android' }}
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r23c
-          link-to-sdk: true
+        shell: bash
+        run: |
+          set -eu
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          sdkmanager_bin="$(command -v sdkmanager || true)"
+          if [ -z "${sdkmanager_bin}" ]; then
+            sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          yes | "${sdkmanager_bin}" --install "ndk;${NDK_VERSION}" > /dev/null
+          echo "ANDROID_NDK_ROOT=${sdk_root}/ndk/${NDK_VERSION}" >> "${GITHUB_ENV}"
+          ls "${sdk_root}/ndk"
 
       - name: Compile native plugin
         uses: ./.github/actions/create-native-build
