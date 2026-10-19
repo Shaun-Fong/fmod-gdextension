@@ -183,8 +183,17 @@ jobs:
           if [ -z "${sdkmanager_bin}" ]; then
             sdkmanager_bin="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
           fi
-          yes | "${sdkmanager_bin}" --install "ndk;${NDK_VERSION}" > /dev/null
-          echo "ANDROID_NDK_ROOT=${sdk_root}/ndk/${NDK_VERSION}" >> "${GITHUB_ENV}"
+          # GitHub runs this step with "bash -e -o pipefail", and "yes" dies with
+          # SIGPIPE as soon as sdkmanager stops reading, which would fail the
+          # whole step. Feed a short, finite list of confirmations instead and
+          # verify the installation afterwards.
+          printf 'y\ny\ny\ny\ny\n' | "${sdkmanager_bin}" --install "ndk;${NDK_VERSION}" > /dev/null || true
+          ndk_dir="${sdk_root}/ndk/${NDK_VERSION}"
+          if [ ! -d "${ndk_dir}" ]; then
+            echo "::error title=Missing Android NDK::Could not install NDK ${NDK_VERSION} in ${sdk_root}/ndk."
+            exit 1
+          fi
+          echo "ANDROID_NDK_ROOT=${ndk_dir}" >> "${GITHUB_ENV}"
           ls "${sdk_root}/ndk"
 
       - name: Compile native plugin
