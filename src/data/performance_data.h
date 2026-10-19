@@ -19,9 +19,10 @@ namespace godot {
         int currently_allocated = 0;
         int max_allocated = 0;
 
-        int sample_bytes_read = 0;
-        int stream_bytes_read = 0;
-        int other_bytes_read = 0;
+        // FMOD reports these in bytes as 64 bit values, they can overflow an int on long sessions.
+        int64_t sample_bytes_read = 0;
+        int64_t stream_bytes_read = 0;
+        int64_t other_bytes_read = 0;
 
         float get_geometry() const;
         float get_stream() const;
@@ -34,9 +35,9 @@ namespace godot {
         int get_currently_allocated() const;
         int get_max_allocated() const;
 
-        int get_sample_bytes_read() const;
-        int get_stream_bytes_read() const;
-        int get_other_bytes_read() const;
+        int64_t get_sample_bytes_read() const;
+        int64_t get_stream_bytes_read() const;
+        int64_t get_other_bytes_read() const;
 
     protected:
         static void _bind_methods();

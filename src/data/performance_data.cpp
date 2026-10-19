@@ -72,14 +72,14 @@ int FmodPerformanceData::get_max_allocated() const {
     return max_allocated;
 }
 
-int FmodPerformanceData::get_sample_bytes_read() const {
+int64_t FmodPerformanceData::get_sample_bytes_read() const {
     return sample_bytes_read;
 }
 
-int FmodPerformanceData::get_stream_bytes_read() const {
+int64_t FmodPerformanceData::get_stream_bytes_read() const {
     return stream_bytes_read;
 }
 
-int FmodPerformanceData::get_other_bytes_read() const {
+int64_t FmodPerformanceData::get_other_bytes_read() const {
     return other_bytes_read;
 }

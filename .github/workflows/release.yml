@@ -161,6 +161,9 @@ jobs:
 
   package-godot-addon:
     needs: [build]
+    # Needed to publish the release assets with the token of the workflow.
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -168,7 +171,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           lfs: true
           submodules: recursive
@@ -262,17 +265,6 @@ jobs:
           name: android-template_release
           path: demo/addons/fmod/libs/android/
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
       - name: Zip fmod addon
         run: |
           cd demo/addons/
@@ -290,22 +282,17 @@ jobs:
                'run_tests.sh' \
                'test/' 'test/*' 'test/**' \
 
-      - name: Upload Addon Asset
-        uses: actions/upload-release-asset@v1
+      # Replaces the archived actions/create-release@v1 and actions/upload-release-asset@v1
+      # actions, which rely on the removed node12 runtime.
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            demo/addons/addons.zip
+            demo/demo.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: ./demo/addons/addons.zip
-          asset_name: addons.zip
-          asset_content_type: application/zip
-
-      - name: Upload Demo Project Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./demo/demo.zip
-          asset_name: demo.zip
-          asset_content_type: application/zip

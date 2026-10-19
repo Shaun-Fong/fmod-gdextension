@@ -23,20 +23,25 @@ namespace Callbacks {
 
     FMOD_RESULT GodotFileRunner::cancelReadRequest(FMOD_ASYNCREADINFO* request) {
         // lock so we can't add and remove elements from the queue at the same time.
+        bool removed {false};
         {
             std::lock_guard<std::mutex> lk(read_mut);
-            if (requests.erase(request)) {
-                request->bytesread = 0;
-                request->done(request, FMOD_RESULT::FMOD_ERR_FILE_DISKEJECTED);
-                return FMOD_RESULT::FMOD_ERR_FILE_DISKEJECTED;
-            }
+            removed = requests.erase(request);
+        }
+
+        // The request is answered outside of the queue lock: the FMOD callback can queue a new
+        // read request, which would deadlock on the non recursive mutex.
+        if (removed) {
+            request->bytesread = 0;
+            request->done(request, FMOD_RESULT::FMOD_ERR_FILE_DISKEJECTED);
+            return FMOD_RESULT::FMOD_ERR_FILE_DISKEJECTED;
         }
 
         // We lock and check if the current request is the one being canceled.
         // In this case, we wait until it's done.
         {
             std::unique_lock<std::mutex> lk(cancel_mut);
-            if (request == current_request) { cancel_cv.wait(lk); }
+            cancel_cv.wait(lk, [this, request] { return request != current_request; });
         }
 
         return FMOD_RESULT::FMOD_OK;
@@ -50,42 +55,67 @@ namespace Callbacks {
                 read_cv.wait(lk, [this] { return !requests.is_empty() || stop; });
             }
 
-            while (!requests.is_empty()) {
+            while (true) {
+                FMOD_ASYNCREADINFO* request {nullptr};
                 // lock so we can't add and remove elements from the queue at the same time.
-                // also store the current request so it cannot be canceled during processing.
+                // The current request is published while the read mutex is still held, so a
+                // concurrent cancel cannot report the request as done a second time.
                 {
                     std::lock_guard<std::mutex> lk(read_mut);
-                    current_request = requests.front()->get();
+                    if (requests.is_empty()) { break; }
+                    request = requests.front()->get();
                     requests.pop_front();
+
+                    std::lock_guard<std::mutex> cancel_lk(cancel_mut);
+                    current_request = request;
                 }
 
                 // We get the Godot File object from the handle
-                GodotFileHandle* handle {reinterpret_cast<GodotFileHandle*>(current_request->handle)};
-                godot::Ref<godot::FileAccess> file {handle->file};
+                GodotFileHandle* handle {reinterpret_cast<GodotFileHandle*>(request->handle)};
+                if (handle == nullptr) {
+                    request->bytesread = 0;
+                    request->done(request, FMOD_RESULT::FMOD_ERR_FILE_NOTFOUND);
+                } else {
+                    godot::Ref<godot::FileAccess> file {handle->file};
 
-                // update the position of the cursor
-                file->seek(current_request->offset);
+                    // update the position of the cursor
+                    file->seek(request->offset);
 
-                // We read and store the requested data in an array.
-                godot::PackedByteArray buffer {file->get_buffer(current_request->sizebytes)};
-                int size {static_cast<int>(buffer.size())};
-                const uint8_t* data {buffer.ptr()};
+                    // We read and store the requested data in an array.
+                    godot::PackedByteArray buffer {file->get_buffer(request->sizebytes)};
+                    int size {static_cast<int>(buffer.size())};
+                    const uint8_t* data {buffer.ptr()};
 
-                // We copy the data to FMOD buffer
-                memcpy(current_request->buffer, data, size * sizeof(uint8_t));
-                current_request->bytesread = size;
+                    // We copy the data to FMOD buffer
+                    if (size > 0) { memcpy(request->buffer, data, size * sizeof(uint8_t)); }
+                    request->bytesread = size;
 
-                // Remember to return an error if the end of the file is reached
-                FMOD_RESULT result = (size < current_request->sizebytes) ? FMOD_RESULT::FMOD_ERR_FILE_EOF : FMOD_RESULT::FMOD_OK;
-                current_request->done(current_request, result);
+                    // Remember to return an error if the end of the file is reached
+                    FMOD_RESULT result = (size < request->sizebytes) ? FMOD_RESULT::FMOD_ERR_FILE_EOF : FMOD_RESULT::FMOD_OK;
+                    request->done(request, result);
+                }
 
                 // Request no longer processed
                 {
                     std::lock_guard<std::mutex> lk(cancel_mut);
                     current_request = nullptr;
                 }
-                cancel_cv.notify_one();
+                cancel_cv.notify_all();
             }
+        }
+
+        // Answer the requests that were never processed, otherwise FMOD would wait forever
+        // for an asynchronous read that cannot complete anymore.
+        while (true) {
+            FMOD_ASYNCREADINFO* request {nullptr};
+            {
+                std::lock_guard<std::mutex> lk(read_mut);
+                if (requests.is_empty()) { break; }
+                request = requests.front()->get();
+                requests.pop_front();
+            }
+            request->bytesread = 0;
+            request->done(request, FMOD_RESULT::FMOD_ERR_FILE_DISKEJECTED);
         }
     }
 
@@ -104,17 +134,18 @@ namespace Callbacks {
     FMOD_RESULT F_CALL godotFileOpen(const char* name, unsigned int* filesize, void** handle, void* userdata) {
         godot::Ref<godot::FileAccess> access = godot::FileAccess::open(name, godot::FileAccess::ModeFlags::READ);
 
-        if (access->get_error() == godot::Error::OK) {
-            *filesize = access->get_length();
-            GodotFileHandle* fileHandle {new GodotFileHandle {access}};
-            *handle = reinterpret_cast<void*>(fileHandle);
-            return FMOD_RESULT::FMOD_OK;
+        if (access.is_null() || access->get_error() != godot::Error::OK) {
+            return FMOD_RESULT::FMOD_ERR_FILE_NOTFOUND;
         }
-        return FMOD_RESULT::FMOD_ERR_FILE_NOTFOUND;
+
+        *filesize = access->get_length();
+        GodotFileHandle* fileHandle {new GodotFileHandle {access}};
+        *handle = reinterpret_cast<void*>(fileHandle);
+        return FMOD_RESULT::FMOD_OK;
     }
 
     FMOD_RESULT F_CALL godotFileClose(void* handle, void* userdata) {
-        godot::Ref<godot::FileAccess> file {reinterpret_cast<GodotFileHandle*>(handle)->file};
+        if (handle == nullptr) { return FMOD_RESULT::FMOD_OK; }
         delete reinterpret_cast<GodotFileHandle*>(handle);
         return FMOD_RESULT::FMOD_OK;
     }

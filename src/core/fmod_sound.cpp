@@ -63,7 +63,8 @@ void FmodSound::set_pitch(float pitch) {
 }
 
 bool FmodSound::is_valid() const {
-    bool isPlaying;
+    if (_wrapped == nullptr) { return false; }
+    bool isPlaying = false;
     FMOD_RESULT result = _wrapped->isPlaying(&isPlaying);
     return result != FMOD_ERR_INVALID_HANDLE;
 }

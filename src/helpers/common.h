@@ -58,7 +58,7 @@ private:
                                                                          \
 private:                                                                 \
     m_owned* _wrapped = nullptr;                                         \
-    FMOD_GUID _guid;                                                     \
+    FMOD_GUID _guid {};                                                  \
     String _path;                                                        \
                                                                          \
 public:                                                                  \
@@ -67,10 +67,17 @@ public:                                                                  \
         if (wrapped) {                                                   \
             ref.instantiate();                                           \
             ref->_wrapped = wrapped;                                     \
-            char path[MAX_PATH_SIZE];                                    \
-            ERROR_CHECK(wrapped->getPath(path, MAX_PATH_SIZE, nullptr)); \
-            ERROR_CHECK(wrapped->getID(&ref->_guid));                    \
-            ref->_path = String(path);                                   \
+            char path[MAX_PATH_SIZE] = {0};                              \
+            /* FMOD_ERR_EVENT_NOTFOUND is returned for any getPath: */   \
+            /* https://www.fmod.com/docs/2.03/api/core-api-common.html */\
+            FMOD_RESULT path_result = wrapped->getPath(path, MAX_PATH_SIZE, nullptr);\
+            if (path_result == FMOD_ERR_EVENT_NOTFOUND) {                \
+                ref->_path = String();                                   \
+            } else if (ERROR_CHECK(path_result)) {                       \
+                ref->_path = String(path);                               \
+            }                                                            \
+            FMOD_GUID guid {};                                           \
+            if (ERROR_CHECK(wrapped->getID(&guid))) { ref->_guid = guid; }\
         }                                                                \
         return ref;                                                      \
     }                                                                    \
@@ -142,12 +149,14 @@ namespace godot {
     }
 
     static inline FMOD_GUID string_to_fmod_guid(const char* guid) {
-        FMOD_GUID result;
-        sscanf(guid,
-               "{%8x-%4hx-%4hx-%2hhx%2hhx-%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx}",
-               &result.Data1, &result.Data2, &result.Data3,
-               &result.Data4[0], &result.Data4[1], &result.Data4[2], &result.Data4[3],
-               &result.Data4[4], &result.Data4[5], &result.Data4[6], &result.Data4[7]);
+        FMOD_GUID result {};
+        if (guid == nullptr) { return result; }
+        const int parsed = sscanf(guid,
+                                  "{%8x-%4hx-%4hx-%2hhx%2hhx-%2hhx%2hhx%2hhx%2hhx%2hhx%2hhx}",
+                                  &result.Data1, &result.Data2, &result.Data3,
+                                  &result.Data4[0], &result.Data4[1], &result.Data4[2], &result.Data4[3],
+                                  &result.Data4[4], &result.Data4[5], &result.Data4[6], &result.Data4[7]);
+        if (parsed != 11) { return FMOD_GUID {}; }
         return result;
     }
 

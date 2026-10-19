@@ -289,7 +289,12 @@ namespace godot {
     template<FmodServer::EventIdentifierType parameter_type>
     Ref<FmodEvent> FmodServer::_create_event_instance(const EventIdentifier& identifier) {
         FMOD::Studio::EventInstance* eventInstance = nullptr;
-        ERROR_CHECK(fetch_event_description<parameter_type>(identifier)->get_wrapped()->createInstance(&eventInstance));
+        const Ref<FmodEventDescription> description = fetch_event_description<parameter_type>(identifier);
+        if (description.is_null() || !description->is_valid()) {
+            // The cache already logs a warning when the event cannot be found in debug builds.
+            return {};
+        }
+        ERROR_CHECK(description->get_wrapped()->createInstance(&eventInstance));
 
         Ref<FmodEvent> ref = FmodEvent::create_ref(eventInstance);
         if (ref.is_null() || !ref->is_valid()) {
@@ -306,6 +311,9 @@ namespace godot {
     template<FmodServer::EventIdentifierType parameter_type>
     void FmodServer::_play_one_shot(const FmodServer::EventIdentifier& identifier, Node* game_obj, const Dictionary& parameters) {
         Ref<FmodEventDescription> desc =  fetch_event_description<parameter_type>(identifier);
+        if (desc.is_null() || !desc->is_valid()) {
+            return;
+        }
         if (!desc->is_one_shot()){
             GODOT_LOG_WARNING(desc->get_path() + " is not a OneShot event.")
             return;

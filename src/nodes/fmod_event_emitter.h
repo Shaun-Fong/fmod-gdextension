@@ -448,6 +448,11 @@ namespace godot {
         _event_name = name;
         _event_guid = event_guid;
 
+#ifdef TOOLS_ENABLED
+        // Setting the event from the inspector must not start playing the event in the editor.
+        if (Engine::get_singleton()->is_editor_hint()) { return; }
+#endif
+
         _stop_and_restart_if_autoplay();
     }
 
@@ -466,6 +471,11 @@ namespace godot {
 
         _event_guid = event_guid;
         _event_name = FmodServer::get_singleton()->get_event_path_internal(_event_guid);
+
+#ifdef TOOLS_ENABLED
+        // Setting the event from the inspector must not start playing the event in the editor.
+        if (Engine::get_singleton()->is_editor_hint()) { return; }
+#endif
 
         _stop_and_restart_if_autoplay();
     }
@@ -817,6 +827,10 @@ namespace godot {
     FmodEventEmitter<Derived, NodeType>::_get_parameter_description(const FmodEventEmitter::Parameter& parameter) const {
         _load_event_description_if_needed();
 
+        if (_event_description.is_null() || !_event_description->is_valid()) {
+            return {};
+        }
+
         return parameter.should_load_by_id
                ? _event_description->get_parameter_by_id(parameter.id)
                : _event_description->get_parameter_by_name(parameter.name);
@@ -865,7 +879,7 @@ namespace godot {
         ClassDB::bind_method(D_METHOD("is_attached"), &Derived::is_attached);
         ClassDB::bind_method(D_METHOD("set_autoplay", "_autoplay"), &Derived::set_autoplay);
         ClassDB::bind_method(D_METHOD("is_autoplay"), &Derived::is_autoplay);
-        ClassDB::bind_method(D_METHOD("set_auto_release", "_autoplay"), &Derived::set_auto_release);
+        ClassDB::bind_method(D_METHOD("set_auto_release", "auto_release"), &Derived::set_auto_release);
         ClassDB::bind_method(D_METHOD("is_auto_release"), &Derived::is_auto_release);
         ClassDB::bind_method(D_METHOD("set_allow_fadeout", "allow_fadeout"), &Derived::set_allow_fadeout);
         ClassDB::bind_method(D_METHOD("is_allow_fadeout"), &Derived::is_allow_fadeout);

@@ -84,7 +84,7 @@ void FmodLoggingSettings::_bind_methods() {
 
     // Debug level property
     ADD_PROPERTY(
-      PropertyInfo(Variant::INT, "debug_level", PROPERTY_HINT_ENUM, "None,Error Only,Error and Warning,Full Log,Verbose"),
+      PropertyInfo(Variant::INT, "debug_level", PROPERTY_HINT_ENUM, "Inherit,None,Error,Warning,Log,Verbose"),
       "set_debug_level",
       "get_debug_level"
     );
@@ -96,6 +96,7 @@ void FmodLoggingSettings::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "log_file_path", PROPERTY_HINT_FILE, "*.txt,*.log", PROPERTY_USAGE_DEFAULT), "set_log_file_path", "get_log_file_path");
 
     // Bind enum constants
+    BIND_ENUM_CONSTANT(DEBUG_INHERIT);
     BIND_ENUM_CONSTANT(DEBUG_NONE);
     BIND_ENUM_CONSTANT(DEBUG_ERROR);
     BIND_ENUM_CONSTANT(DEBUG_WARNING);

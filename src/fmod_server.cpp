@@ -14,6 +14,8 @@
 #include <classes/node3d.hpp>
 #include <classes/project_settings.hpp>
 
+#include <cstdlib>
+
 using namespace godot;
 
 FmodServer* FmodServer::singleton = nullptr;
@@ -286,7 +288,7 @@ void FmodServer::_set_listener_attributes() {
         }
 
         Node* node {listener->wrapper.get_node()};
-        if (!node->is_inside_tree()) { return; }
+        if (!node->is_inside_tree()) { continue; }
 
         if (auto* ci {Node::cast_to<CanvasItem>(node)}) {
             FMOD_3D_ATTRIBUTES attr = get_3d_attributes_from_transform2d(ci->get_global_transform(), distanceScale);
@@ -309,6 +311,15 @@ void FmodServer::shutdown() {
 
     isInitialized = false;
     isNotInitializedPrinted = false;
+
+    // Release every event instance while the FMOD system is still alive. Otherwise their
+    // destructors (and the cache) would later dereference released handles.
+    runningEvents.clear();
+    for (OneShot* one_shot : oneShots) {
+        delete one_shot;
+    }
+    oneShots.clear();
+
     ERROR_CHECK(system->unloadAll());
     ERROR_CHECK(system->release());
     system = nullptr;
@@ -484,6 +495,7 @@ void FmodServer::set_software_format(const Ref<FmodSoftwareFormatSettings>& p_se
 }
 
 Ref<FmodBank> FmodServer::load_bank(const String& pathToBank, unsigned int flag) {
+    if (cache == nullptr) { return {}; }
     if (cache->has_bank(pathToBank)) { return cache->get_bank(pathToBank); }// bank is already loaded
 
 #ifdef DEBUG_ENABLED
@@ -497,18 +509,14 @@ Ref<FmodBank> FmodServer::load_bank(const String& pathToBank, unsigned int flag)
 }
 
 void FmodServer::unload_bank(const String& pathToBank) {
-#ifdef DEBUG_ENABLED
-    if (!FileAccess::file_exists(pathToBank)) {
-        GODOT_LOG_ERROR(vformat("Cannot unload bank at %s", pathToBank))
-        return;
-    }
-#endif
-
+    // The cache is deleted by shutdown(). A bank Ref can be released afterwards, in which
+    // case there is nothing left to unload.
+    if (cache == nullptr) { return; }
     cache->remove_bank(pathToBank);
 }
 
 bool FmodServer::banks_still_loading() {
-    return cache->is_loading();
+    return cache != nullptr && cache->is_loading();
 }
 
 #ifdef IOS_ENABLED
@@ -522,6 +530,14 @@ uint32_t register_ios_codec(FMOD_SYSTEM_PTR system, FMOD_CODEC_DESCRIPTION* desc
 
 uint32_t register_ios_output(FMOD_SYSTEM_PTR system, FMOD_OUTPUT_DESCRIPTION* description, uint32_t* handle) {
     return reinterpret_cast<FMOD::System*>(system)->registerOutput(description, handle);
+}
+
+// Weak fallback: the exported project provides its own definition when it registers static
+// plugins. Without it the library would fail to link for projects that do not.
+extern "C" __attribute__((weak)) uint32_t* load_all_fmod_plugins(FMOD_IOS_INTERFACE* ios_interface, uint32_t* r_count) {
+    (void) ios_interface;
+    if (r_count != nullptr) { *r_count = 0; }
+    return nullptr;
 }
 #endif
 
@@ -542,12 +558,14 @@ void FmodServer::load_all_plugins(const Ref<FmodPluginsSettings>& p_settings) {
       .register_output_method = &register_ios_output
     };
 
-    uint32_t plugin_count;
+    uint32_t plugin_count = 0;
     uint32_t* plugin_handles = load_all_fmod_plugins(&interface, &plugin_count);
-    for (uint32_t i = 0; i < plugin_count; ++i) {
-        cache->add_plugin(plugin_handles[i]);
+    if (plugin_handles != nullptr) {
+        for (uint32_t i = 0; i < plugin_count; ++i) {
+            cache->add_plugin(plugin_handles[i]);
+        }
+        std::free(plugin_handles);
     }
-    std::free(plugin_handles);
 #endif
 }
 
@@ -982,9 +1000,9 @@ void FmodServer::_update_performance_data() {
     long long streamBytesRead = 0;
     long long otherBytesRead = 0;
     ERROR_CHECK(coreSystem->getFileUsage(&sampleBytesRead, &streamBytesRead, &otherBytesRead));
-    performanceData->sample_bytes_read = static_cast<int>(sampleBytesRead);
-    performanceData->stream_bytes_read = static_cast<int>(streamBytesRead);
-    performanceData->other_bytes_read = static_cast<int>(otherBytesRead);
+    performanceData->sample_bytes_read = sampleBytesRead;
+    performanceData->stream_bytes_read = streamBytesRead;
+    performanceData->other_bytes_read = otherBytesRead;
 }
 
 Ref<FmodPerformanceData> FmodServer::get_performance_data() {
@@ -1007,11 +1025,12 @@ void FmodServer::set_global_parameter_by_name_with_label(const String& parameter
 
 float FmodServer::get_global_parameter_by_name(const String& parameter_name) {
     float value = 0.f;
+    float finalValue = 0.f;
     ERROR_CHECK_WITH_REASON(
-      system->getParameterByName(parameter_name.utf8().get_data(), &value),
-      vformat("Cannot get global parameter %s", parameter_name, value)
+      system->getParameterByName(parameter_name.utf8().get_data(), &value, &finalValue),
+      vformat("Cannot get global parameter %s", parameter_name)
     );
-    return value;
+    return finalValue;
 }
 
 void FmodServer::set_global_parameter_by_id(uint64_t parameter_id, const float value) {
@@ -1030,11 +1049,12 @@ void FmodServer::set_global_parameter_by_id_with_label(uint64_t parameter_id, co
 
 float FmodServer::get_global_parameter_by_id(uint64_t parameter_id) {
     float value = -1.f;
+    float finalValue = -1.f;
     ERROR_CHECK_WITH_REASON(
-      system->getParameterByID(ulong_to_fmod_parameter_id(parameter_id), &value),
-      vformat("Cannot set global parameter %d", parameter_id, value)
+      system->getParameterByID(ulong_to_fmod_parameter_id(parameter_id), &value, &finalValue),
+      vformat("Cannot get global parameter %d", parameter_id)
     );
-    return value;
+    return finalValue;
 }
 
 Dictionary FmodServer::get_global_parameter_desc_by_name(const String& parameter_name) {
@@ -1082,10 +1102,22 @@ int FmodServer::get_global_parameter_desc_count() {
 
 Array FmodServer::get_global_parameter_desc_list() {
     Array a;
-    FMOD_STUDIO_PARAMETER_DESCRIPTION
-    descList[256];
+
+    // The list used to be stored in a fixed size buffer, so any project with more than 256
+    // global parameters silently lost the extra ones.
+    const int available_count {get_global_parameter_desc_count()};
+    if (available_count <= 0) {
+        return a;
+    }
+
+    Vector<FMOD_STUDIO_PARAMETER_DESCRIPTION> descList;
+    descList.resize(available_count);
+
     int count = 0;
-    ERROR_CHECK(system->getParameterDescriptionList(descList, 256, &count));
+    if (!ERROR_CHECK(system->getParameterDescriptionList(descList.ptrw(), available_count, &count))) {
+        return a;
+    }
+
     for (int i = 0; i < count; ++i) {
         auto pDesc = descList[i];
         Dictionary paramDesc;

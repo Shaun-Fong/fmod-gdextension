@@ -24,14 +24,7 @@ void FmodEventDescription::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_min_max_distance"), &FmodEventDescription::get_min_max_distance);
     ClassDB::bind_method(D_METHOD("get_sound_size"), &FmodEventDescription::get_sound_size);
     ClassDB::bind_method(D_METHOD("get_parameter_by_name", "name"), &FmodEventDescription::get_parameter_by_name);
-    ClassDB::bind_method(
-      D_METHOD(
-        "get_parameter_by_id",
-        "eventPath"
-        "idPair"
-      ),
-      &FmodEventDescription::get_parameter_by_id
-    );
+    ClassDB::bind_method(D_METHOD("get_parameter_by_id", "id"), &FmodEventDescription::get_parameter_by_id);
     ClassDB::bind_method(D_METHOD("get_parameter_count"), &FmodEventDescription::get_parameter_count);
     ClassDB::bind_method(D_METHOD("get_parameter_by_index", "index"), &FmodEventDescription::get_parameter_by_index);
     ClassDB::bind_method(D_METHOD("get_parameters"), &FmodEventDescription::get_parameters);
@@ -66,9 +59,11 @@ Array FmodEventDescription::get_instance_list() {
 
         if (ERROR_CHECK_WITH_REASON(_wrapped->getInstanceList(instances.ptrw(), size, &size), vformat("Cannot get instances list for event %s with guid %s", get_path(), get_guid_as_string()))) {
             for (int i = 0; i < size; ++i) {
-                godot::FmodEvent* event_instance;
+                godot::FmodEvent* event_instance {nullptr};
                 instances[i]->getUserData((void**) &event_instance);
-                array.append(Ref(event_instance));
+                if (event_instance != nullptr) {
+                    array.append(Ref<FmodEvent>(event_instance));
+                }
             }
         }
     }
@@ -147,6 +142,7 @@ float FmodEventDescription::get_sound_size() {
 }
 
 Ref<FmodParameterDescription> FmodEventDescription::get_parameter_by_name(const String& name) const {
+    if (!is_valid()) { return {}; }
     Ref<FmodParameterDescription> param_desc;
     FMOD_STUDIO_PARAMETER_DESCRIPTION fmod_desc;
     if (ERROR_CHECK_WITH_REASON(_wrapped->getParameterDescriptionByName(name.utf8().get_data(), &fmod_desc),
@@ -157,6 +153,7 @@ Ref<FmodParameterDescription> FmodEventDescription::get_parameter_by_name(const 
 }
 
 Ref<FmodParameterDescription> FmodEventDescription::get_parameter_by_id(uint64_t id) const {
+    if (!is_valid()) { return {}; }
     Ref<FmodParameterDescription> param_desc;
     FMOD_STUDIO_PARAMETER_ID param_id { ulong_to_fmod_parameter_id(id) };
     FMOD_STUDIO_PARAMETER_DESCRIPTION fmod_desc;
@@ -168,6 +165,7 @@ Ref<FmodParameterDescription> FmodEventDescription::get_parameter_by_id(uint64_t
 }
 
 int FmodEventDescription::get_parameter_count() const {
+    if (!is_valid()) { return 0; }
     int count = 0;
     ERROR_CHECK_WITH_REASON(_wrapped->getParameterDescriptionCount(&count),
                             vformat("Cannot get parameter count for event %s with guid %s", get_path(), get_guid_as_string()));
@@ -175,6 +173,7 @@ int FmodEventDescription::get_parameter_count() const {
 }
 
 Ref<FmodParameterDescription> FmodEventDescription::get_parameter_by_index(int index) const {
+    if (!is_valid()) { return {}; }
     Ref<FmodParameterDescription> param_desc;
     FMOD_STUDIO_PARAMETER_DESCRIPTION fmod_desc;
     if (ERROR_CHECK_WITH_REASON(_wrapped->getParameterDescriptionByIndex(index, &fmod_desc),
@@ -193,49 +192,62 @@ Array FmodEventDescription::get_parameters() const {
 }
 
 String FmodEventDescription::get_parameter_label_by_id(uint64_t id, int label_index) const {
-    char label[PARAMETER_LABEL_BUFFER_SIZE];
-    int retrieved;
-    _wrapped->getParameterLabelByID(
-      ulong_to_fmod_parameter_id(id),
-      label_index,
-      label,
-      PARAMETER_LABEL_BUFFER_SIZE,
-      &retrieved
-    );
+    if (!is_valid()) { return {}; }
+    char label[PARAMETER_LABEL_BUFFER_SIZE] = {0};
+    int retrieved = 0;
+    if (!ERROR_CHECK_WITH_REASON(_wrapped->getParameterLabelByID(
+          ulong_to_fmod_parameter_id(id),
+          label_index,
+          label,
+          PARAMETER_LABEL_BUFFER_SIZE,
+          &retrieved
+        ),
+                                 vformat("Cannot get parameter label for event %s with guid %s", get_path(), get_guid_as_string()))) {
+        return {};
+    }
     return {label};
 }
 
 String FmodEventDescription::get_parameter_label_by_name(const String& parameter_name, int label_index) const {
-    char label[PARAMETER_LABEL_BUFFER_SIZE];
-    int retrieved;
-    _wrapped->getParameterLabelByName(
-      parameter_name.utf8().get_data(),
-      label_index,
-      label,
-      PARAMETER_LABEL_BUFFER_SIZE,
-      &retrieved
-    );
+    if (!is_valid()) { return {}; }
+    char label[PARAMETER_LABEL_BUFFER_SIZE] = {0};
+    int retrieved = 0;
+    if (!ERROR_CHECK_WITH_REASON(_wrapped->getParameterLabelByName(
+          parameter_name.utf8().get_data(),
+          label_index,
+          label,
+          PARAMETER_LABEL_BUFFER_SIZE,
+          &retrieved
+        ),
+                                 vformat("Cannot get parameter label for event %s with guid %s", get_path(), get_guid_as_string()))) {
+        return {};
+    }
     return {label};
 }
 
 String FmodEventDescription::get_parameter_label_by_index(int index, int label_index) const {
-    char label[PARAMETER_LABEL_BUFFER_SIZE];
-    int retrieved;
-    _wrapped->getParameterLabelByIndex(
-      index,
-      label_index,
-      label,
-      PARAMETER_LABEL_BUFFER_SIZE,
-      &retrieved
-    );
+    if (!is_valid()) { return {}; }
+    char label[PARAMETER_LABEL_BUFFER_SIZE] = {0};
+    int retrieved = 0;
+    if (!ERROR_CHECK_WITH_REASON(_wrapped->getParameterLabelByIndex(
+          index,
+          label_index,
+          label,
+          PARAMETER_LABEL_BUFFER_SIZE,
+          &retrieved
+        ),
+                                 vformat("Cannot get parameter label for event %s with guid %s", get_path(), get_guid_as_string()))) {
+        return {};
+    }
     return {label};
 }
 
 PackedStringArray FmodEventDescription::get_parameter_labels_by_id(uint64_t id) const {
     PackedStringArray labels;
+    if (!is_valid()) { return labels; }
 
     Ref<FmodParameterDescription> parameter {get_parameter_by_id(id)};
-    if (!parameter->is_labeled()) {
+    if (parameter.is_null() || !parameter->is_labeled()) {
         return labels;
     }
 
@@ -248,9 +260,10 @@ PackedStringArray FmodEventDescription::get_parameter_labels_by_id(uint64_t id) 
 
 PackedStringArray FmodEventDescription::get_parameter_labels_by_name(const String& parameter_name) const {
     PackedStringArray labels;
+    if (!is_valid()) { return labels; }
 
     Ref<FmodParameterDescription> parameter {get_parameter_by_name(parameter_name)};
-    if (!parameter->is_labeled()) {
+    if (parameter.is_null() || !parameter->is_labeled()) {
         return labels;
     }
 
@@ -263,9 +276,10 @@ PackedStringArray FmodEventDescription::get_parameter_labels_by_name(const Strin
 
 PackedStringArray FmodEventDescription::get_parameter_labels_by_index(int index) const {
     PackedStringArray labels;
+    if (!is_valid()) { return labels; }
 
     Ref<FmodParameterDescription> parameter {get_parameter_by_index(index)};
-    if (!parameter->is_labeled()) {
+    if (parameter.is_null() || !parameter->is_labeled()) {
         return labels;
     }
 

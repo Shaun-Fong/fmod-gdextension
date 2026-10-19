@@ -155,5 +155,10 @@ const String& FmodBank::get_godot_res_path() const {
 }
 
 FmodBank::~FmodBank() {
-    FmodServer::get_singleton()->unload_bank(_godot_res_path);
+    FmodServer* server {FmodServer::get_singleton()};
+    // The server (and its cache) can already be gone when the last reference to a bank is
+    // released, for example when Godot shuts down the scene tree after uninitialize_fmod.
+    if (server != nullptr) {
+        server->unload_bank(_godot_res_path);
+    }
 }

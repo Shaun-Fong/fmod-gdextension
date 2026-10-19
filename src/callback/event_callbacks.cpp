@@ -10,16 +10,23 @@
 namespace Callbacks {
 
     FMOD_RESULT F_CALL event_callback(FMOD_STUDIO_EVENT_CALLBACK_TYPE type, FMOD_STUDIO_EVENTINSTANCE* event, void* parameters) {
+        godot::FmodServer* server {godot::FmodServer::get_singleton()};
+        if (server == nullptr) {
+            return FMOD_OK;
+        }
+
         auto* instance = reinterpret_cast<FMOD::Studio::EventInstance*>(event);
-        godot::FmodEvent* event_instance;
+        godot::FmodEvent* event_instance {nullptr};
         instance->getUserData((void**) &event_instance);
         if (event_instance) {
             if (type == FMOD_STUDIO_EVENT_CALLBACK_CREATE_PROGRAMMER_SOUND) {
                 const godot::String& sound_key {event_instance->get_programmers_callback_sound_key()};
-                FMOD_STUDIO_SOUND_INFO sound_info {godot::FmodServer::get_singleton()->get_sound_info(sound_key)};
-                FMOD::Sound* sound {
-                        godot::FmodServer::get_singleton()->create_sound(sound_info, FMOD_LOOP_NORMAL | FMOD_CREATECOMPRESSEDSAMPLE | FMOD_NONBLOCKING)
-                };
+                FMOD_STUDIO_SOUND_INFO sound_info {server->get_sound_info(sound_key)};
+                FMOD::Sound* sound {server->create_sound(sound_info, FMOD_LOOP_NORMAL | FMOD_CREATECOMPRESSEDSAMPLE | FMOD_NONBLOCKING)};
+
+                if (sound == nullptr) {
+                    return FMOD_ERR_FILE_NOTFOUND;
+                }
 
                 auto* props { reinterpret_cast<FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES*>(parameters) };
 
@@ -32,7 +39,9 @@ namespace Callbacks {
                 auto* props { reinterpret_cast<FMOD_STUDIO_PROGRAMMER_SOUND_PROPERTIES*>(parameters) };
                 auto* sound {(FMOD::Sound*) props->sound};
 
-                ERROR_CHECK(sound->release());
+                if (sound != nullptr) {
+                    ERROR_CHECK(sound->release());
+                }
 
                 return FMOD_OK;
             }
@@ -53,7 +62,7 @@ namespace Callbacks {
             }
             const godot::Callable& callback {event_instance->get_callback()};
             if (!callback.is_null() && callback.is_valid()) {
-                godot::FmodServer::get_singleton()->add_callback(
+                server->add_callback(
                         {
                             type,
                             callback,

@@ -60,9 +60,13 @@ void FmodEvent::_bind_methods() {
 
 float FmodEvent::get_parameter_by_name(const String& parameter_name) const {
     float p = -1;
-    ERROR_CHECK_WITH_REASON(_wrapped->getParameterByName(parameter_name.utf8().get_data(), &p),
+    // Return the final value: it accounts for automation, modulation, seek speed and
+    // command instruments, matching what the FMOD profiler displays. The first out
+    // parameter only reports the value last requested through set_parameter_*.
+    float finalValue = -1;
+    ERROR_CHECK_WITH_REASON(_wrapped->getParameterByName(parameter_name.utf8().get_data(), &p, &finalValue),
                             vformat("Cannot get parameter %s", parameter_name));
-    return p;
+    return finalValue;
 }
 
 void FmodEvent::set_parameter_by_name(const String& parameter_name, float value) const {
@@ -81,9 +85,10 @@ float FmodEvent::get_parameter_by_id(uint64_t long_id) const {
 
 float FmodEvent::get_parameter_by_fmod_id(const FMOD_STUDIO_PARAMETER_ID& parameter_id) const {
     float value = -1.0f;
-    ERROR_CHECK_WITH_REASON(_wrapped->getParameterByID(parameter_id, &value),
+    float finalValue = -1.0f;
+    ERROR_CHECK_WITH_REASON(_wrapped->getParameterByID(parameter_id, &value, &finalValue),
                             vformat("Cannot get parameter with id: %d", fmod_parameter_id_to_ulong(parameter_id)));
-    return value;
+    return finalValue;
 }
 
 void FmodEvent::set_parameter_by_id(uint64_t long_id, float value) const {
@@ -219,6 +224,10 @@ Transform3D FmodEvent::get_3d_attributes() const {
 }
 
 void FmodEvent::set_node_attributes(Node* node) const {
+    if (node == nullptr) {
+        GODOT_LOG_ERROR("Invalid Object. A Godot object bound to FMOD has to be either a Node3D or CanvasItem.")
+        return;
+    }
     if (node->is_inside_tree()) {
         if (auto* ci {Node::cast_to<CanvasItem>(node)}) {
             FMOD_3D_ATTRIBUTES attr = get_3d_attributes_from_transform2d(ci->get_global_transform(), distanceScale);

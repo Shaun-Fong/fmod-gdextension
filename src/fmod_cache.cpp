@@ -62,6 +62,10 @@ void FmodCache::remove_bank(const String& bank_path) {
         return;
     }
     FmodBank* bank = banks[bank_path];
+    if (bank == nullptr) {
+        banks.erase(bank_path);
+        return;
+    }
     _remove_bank_data(bank);
     ERROR_CHECK_WITH_REASON(bank->get_wrapped()->unload(), vformat("Cannot unload bank %s", bank_path));
     banks.erase(bank_path);
@@ -78,13 +82,17 @@ Ref<FmodBank> FmodCache::get_bank(const String& bankPath) {
 #ifndef IOS_ENABLED
 
 uint32_t FmodCache::add_plugin(const String& p_plugin_path, uint32_t p_priority) {
-    uint32_t handle;
+    uint32_t handle = 0;
 #if defined(ANDROID_ENABLED) && !defined(TOOLS_ENABLED)
-    const char* plugin_path = p_plugin_path.utf8().get_data();
+    // On Android the libraries are shipped as is and have to be opened by their file name only.
+    const CharString plugin_path_utf8 = p_plugin_path.utf8();
 #else
-    const char* plugin_path = ProjectSettings::get_singleton()->globalize_path(p_plugin_path).utf8().get_data();
+    const CharString plugin_path_utf8 = ProjectSettings::get_singleton()->globalize_path(p_plugin_path).utf8();
 #endif
-    ERROR_CHECK(core_system->loadPlugin(plugin_path, &handle, p_priority));
+    if (!ERROR_CHECK(core_system->loadPlugin(plugin_path_utf8.get_data(), &handle, p_priority))) {
+        GODOT_LOG_WARNING(vformat("Cannot load plugin %s", p_plugin_path))
+        return 0;
+    }
     plugin_handles.append(handle);
     return handle;
 }
@@ -272,7 +280,12 @@ String FmodCache::get_event_path(const FMOD_GUID& guid) {
 }
 
 bool FmodCache::is_master_loaded() {
-    return banks.size() > 0;
+    if (system == nullptr) { return false; }
+
+    // A project can load a single bank that is not the master bank, so the number of loaded
+    // banks does not tell whether the master bus exists.
+    FMOD::Studio::Bus* master_bus {nullptr};
+    return ERROR_CHECK(system->getBus("bus:/", &master_bus)) && master_bus != nullptr;
 }
 
 void FmodCache::clear() {

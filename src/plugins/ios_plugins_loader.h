@@ -16,6 +16,13 @@ typedef struct {
 } FMOD_IOS_INTERFACE;
 
 extern "C" {
+    // Implemented by the plugin registration code that the iOS export plugin generates.
+    // It is declared weak so that the library still links when the exported project does
+    // not register any static plugin: the fallback implementation in fmod_server.cpp is
+    // then used.
+#if defined(__GNUC__) || defined(__clang__)
+    __attribute__((weak))
+#endif
     uint32_t* load_all_fmod_plugins(FMOD_IOS_INTERFACE* ios_interface, uint32_t* r_count);
 };
 #endif
