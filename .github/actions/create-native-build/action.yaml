@@ -22,7 +22,7 @@ runs:
   steps:
     # Use python 3.x release (works cross platform; best to keep self contained in it's own step)
     - name: Set up Python 3.x
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         # Semantic version range syntax or exact version of a Python version
         python-version: "3.x"
@@ -38,6 +38,15 @@ runs:
         python -m pip install scons==4.7.0 requests ${{ inputs.additional-python-packages }}
         python --version
         scons --version
+
+    # Forked repositories do not inherit the secrets of the upstream repository.
+    # Fail fast with an explicit annotation instead of an opaque traceback from
+    # get_fmod.py, which would otherwise abort every build job during the
+    # download of the FMOD Studio API.
+    - name: Validate FMOD credentials
+      shell: ${{ inputs.shell }}
+      run: |
+        python "${{ github.workspace }}/.github/actions/create-native-build/check_fmod_credentials.py" "${{ inputs.fmod-user }}" "${{ inputs.fmod-password }}"
 
     - name: Installing FMOD on Windows
       shell: ${{ inputs.shell }}

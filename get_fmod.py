@@ -1,7 +1,16 @@
-import requests
 import sys
 
-argv = sys.argv[1:] 
+import requests
+
+argv = sys.argv[1:]
+
+if len(argv) < 4:
+    print(
+        "Usage: get_fmod.py <user> <password> <platform> <fmod_version>\n"
+        "The FMODUSER / FMODPASS credentials are missing. Add both as repository "
+        "secrets (Settings > Secrets and variables > Actions)."
+    )
+    sys.exit(1)
 
 user = argv[0]
 password = argv[1]
@@ -29,23 +38,51 @@ elif platform == 'android':
 elif platform == 'ios':
     # iOS...
     filename = f'fmodstudioapi{fmod_version}ios.dmg'
-    downloadlink = f'https://www.fmod.com/api-get-download-link?path=files/fmodstudio/api/iOS/&filename=fmodstudioapi{fmod_version}ios-installer.dmg&user=$1'
+    downloadlink = f'https://www.fmod.com/api-get-download-link?path=files/fmodstudio/api/iOS/&filename=fmodstudioapi{fmod_version}ios-installer.dmg&user='
+else:
+    print(f"Unsupported platform '{platform}'.")
+    sys.exit(1)
 
 downloadlink += user
 
 # First login and get a token!
-response = requests.post(fmodlink, auth = (user, password)).json()
-token = response["token"]
+response = requests.post(fmodlink, auth=(user, password))
+try:
+    payload = response.json()
+except ValueError:
+    payload = {}
+token = payload.get("token")
+if not token:
+    print(
+        f"FMOD login failed (HTTP {response.status_code}). Check the FMODUSER / "
+        f"FMODPASS repository secrets: they must be the credentials of a valid "
+        f"fmod.com account. Response: {response.text[:200]}"
+    )
+    sys.exit(1)
 
 print("Received token from FMOD login API.")
 
 # Next request a download link using the token!
-response = requests.get(downloadlink, headers = {"Authorization": f"Bearer {token}"}).json()
-url = response["url"]
+response = requests.get(downloadlink, headers={"Authorization": f"Bearer {token}"})
+try:
+    payload = response.json()
+except ValueError:
+    payload = {}
+url = payload.get("url")
+if not url:
+    print(
+        f"Could not get a download link for platform '{platform}' (HTTP "
+        f"{response.status_code}). Response: {response.text[:200]}"
+    )
+    sys.exit(1)
 
 # Download FMOD!
 response = requests.get(url, allow_redirects=True)
-open(filename, 'wb').write(response.content)
+if response.status_code != 200 or not response.content:
+    print(f"Downloading '{filename}' failed with HTTP {response.status_code}.")
+    sys.exit(1)
 
-print("Downloading FMOD using the requested download link.")
-print(response)
+with open(filename, 'wb') as fmod_archive:
+    fmod_archive.write(response.content)
+
+print(f"Downloaded '{filename}' ({len(response.content)} bytes).")
