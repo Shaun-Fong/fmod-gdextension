@@ -54,6 +54,14 @@ bool FmodGeneralSettings::get_should_load_by_name() const {
     return _should_load_by_name;
 }
 
+void FmodGeneralSettings::set_bank_encryption_key(const String& p_bank_encryption_key) {
+    _bank_encryption_key = p_bank_encryption_key;
+}
+
+const String& FmodGeneralSettings::get_bank_encryption_key() const {
+    return _bank_encryption_key;
+}
+
 Ref<FmodGeneralSettings> FmodGeneralSettings::get_from_project_settings() {
     Ref<FmodGeneralSettings> settings;
     settings.instantiate();
@@ -78,6 +86,9 @@ Ref<FmodGeneralSettings> FmodGeneralSettings::get_from_project_settings() {
     String should_load_by_name_setting_path = vformat("%s/%s/%s", FMOD_SETTINGS_BASE_PATH, INITIALIZE_BASE_PATH, SHOULD_LOAD_BY_NAME);
     settings->set_should_load_by_name(project_settings->get_setting(should_load_by_name_setting_path, DEFAULT_SHOULD_LOAD_BY_NAME));
 
+    String bank_encryption_key_setting_path = vformat("%s/%s/%s", FMOD_SETTINGS_BASE_PATH, INITIALIZE_BASE_PATH, BANK_ENCRYPTION_KEY_OPTION);
+    settings->set_bank_encryption_key(project_settings->get_setting(bank_encryption_key_setting_path, DEFAULT_BANK_ENCRYPTION_KEY));
+
     return settings;
 }
 
@@ -99,6 +110,9 @@ void FmodGeneralSettings::_bind_methods() {
 
     ClassDB::bind_method(D_METHOD("set_should_load_by_name", "p_should_load_by_name"), &FmodGeneralSettings::set_should_load_by_name);
     ClassDB::bind_method(D_METHOD("get_should_load_by_name"), &FmodGeneralSettings::get_should_load_by_name);
+
+    ClassDB::bind_method(D_METHOD("set_bank_encryption_key", "p_bank_encryption_key"), &FmodGeneralSettings::set_bank_encryption_key);
+    ClassDB::bind_method(D_METHOD("get_bank_encryption_key"), &FmodGeneralSettings::get_bank_encryption_key);
 
     ADD_PROPERTY(
       PropertyInfo(
@@ -170,5 +184,17 @@ void FmodGeneralSettings::_bind_methods() {
       ),
       "set_should_load_by_name",
       "get_should_load_by_name"
+    );
+
+    ADD_PROPERTY(
+      PropertyInfo(
+        Variant::STRING,
+        "bank_encryption_key",
+        PROPERTY_HINT_NONE,
+        "",
+        PROPERTY_USAGE_DEFAULT
+      ),
+      "set_bank_encryption_key",
+      "get_bank_encryption_key"
     );
 }

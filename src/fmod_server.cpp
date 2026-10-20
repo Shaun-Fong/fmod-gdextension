@@ -188,6 +188,16 @@ void FmodServer::init(const Ref<FmodGeneralSettings>& p_settings) {
     advancedSettings.randomSeed = static_cast<unsigned int>(std::time(nullptr));// Use time as a seed
     ERROR_CHECK(coreSystem->setAdvancedSettings(&advancedSettings));
 
+    // The bank encryption key has to reach the studio system before it is initialized, otherwise encrypted banks
+    // cannot be loaded at all.
+    FMOD_STUDIO_ADVANCEDSETTINGS studioAdvancedSettings = {};
+    studioAdvancedSettings.cbsize = sizeof(FMOD_STUDIO_ADVANCEDSETTINGS);
+    ERROR_CHECK(system->getAdvancedSettings(&studioAdvancedSettings));
+
+    bankEncryptionKeyUtf8 = p_settings->get_bank_encryption_key().utf8();
+    studioAdvancedSettings.encryptionkey = bankEncryptionKeyUtf8.length() > 0 ? bankEncryptionKeyUtf8.get_data() : nullptr;
+    ERROR_CHECK(system->setAdvancedSettings(&studioAdvancedSettings));
+
     FMOD_STUDIO_INITFLAGS studio_init_flags = FMOD_STUDIO_INIT_NORMAL;
 
     if (

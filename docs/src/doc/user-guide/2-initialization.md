@@ -19,6 +19,10 @@ See Studio::Bus::getMemoryUsage and Studio::EventInstance::getMemoryUsage for mo
 Implies FMOD_INIT_MEMORY_TRACKING.
 - Default Listener count: set max listener count (should be between 1 and 8).  
 - Should Load by Name: If true will load events and parameters by name instead of id when using fmod nodes.
+- "Bank Encryption Key": Key used to load encrypted banks. It must match the key configured in the FMOD Studio bank
+export settings. Leave it empty when your banks are not encrypted. The key is forwarded to
+[`FMOD_STUDIO_ADVANCEDSETTINGS::encryptionkey`](https://www.fmod.com/docs/2.03/api/studio-api-system.html#studio_system_setadvancedsettings)
+before the system is initialized, so it cannot be changed at runtime.
 
 ![general-tab]
 

@@ -92,6 +92,9 @@ namespace godot {
 
         float distanceScale;
 
+        // FMOD keeps the encryption key pointer while the system lives, so the buffer has to outlive the init call.
+        CharString bankEncryptionKeyUtf8;
+
         FmodCache* cache;
 
         int systemListenerNumber = 1;

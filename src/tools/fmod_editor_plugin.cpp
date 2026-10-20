@@ -74,6 +74,12 @@ void FmodEditorPlugin::_ready() {
     );
 
     add_setting(
+      vformat("%s/%s/%s", FMOD_SETTINGS_BASE_PATH, FmodGeneralSettings::INITIALIZE_BASE_PATH, FmodGeneralSettings::BANK_ENCRYPTION_KEY_OPTION),
+      FmodGeneralSettings::DEFAULT_BANK_ENCRYPTION_KEY,
+      Variant::Type::STRING
+    );
+
+    add_setting(
             vformat("%s/%s/%s", FMOD_SETTINGS_BASE_PATH, FmodPluginsSettings::PLUGINS_SETTINGS_BASE_PATH, FmodPluginsSettings::RESOURCE_OPTION),
         FmodPluginsSettings::DEFAULT_RESOURCE_OPTION,
         Variant::Type::STRING,
