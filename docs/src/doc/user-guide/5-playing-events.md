@@ -19,6 +19,7 @@ Then, there are a few options you can toggle:
 - *auto_release*: if `true`, the emitter node will be automatically freed when the event finishes playing.  
 - *allow_fadeout*: if `true`, the event will fade out when stopped.  
 - *preload_event*: if `true`, the event will be preloaded when the node is ready. 
+- *visible*: hiding the node stops and releases the event, showing it again restarts it (see [Visibility](#visibility)).
 
 #### Fmod parameters
 
@@ -51,6 +52,18 @@ emitter.set_parameter_by_id(5864137074015534804, 1000)
 emitter.get_parameter("RPM")
 emitter.get_parameter_by_id(5864137074015534804)
 ```
+
+### Visibility
+
+Visibility drives playback. As soon as the emitter is hidden, either because its own `visible` property was set to
+`false` or because one of its parents was hidden, the current event is stopped (honoring *allow_fadeout*) and its
+FMOD event instance is released. The node itself stays in the scene, only the audio is freed.
+
+When the emitter becomes visible again, the event is restarted if *autoplay* is `true`. If *autoplay* is `false`,
+the event is only reloaded when *preload_event* is also `true`, and it has to be started again with `play()`.
+
+Hiding an emitter is therefore a cheap way to turn spatial audio off without removing the node from the tree, and it
+releases the FMOD event instance instead of leaving it allocated.
 
 ### Signals
 

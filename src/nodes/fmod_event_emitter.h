@@ -42,6 +42,8 @@ namespace godot {
         bool _auto_release = false;
         bool _allow_fadeout = true;
         bool _preload_event = true;
+        bool _is_visible = true;
+        bool _event_started = false;
 
         void ready();
         void process();
@@ -109,6 +111,7 @@ namespace godot {
         Parameter* _find_parameter(const String& p_name) const;
         Parameter* _find_parameter(uint64_t p_id) const;
         void _stop_and_restart_if_autoplay();
+        void _update_visibility();
         Ref<FmodParameterDescription> _get_parameter_description(const Parameter& parameter) const;
 
 
@@ -132,7 +135,11 @@ namespace godot {
         if (Engine::get_singleton()->is_editor_hint()) { return; }
 #endif
 
-        if (_autoplay) {
+        // Visibility drives playback, so it has to be tracked even when no event is loaded.
+        NodeType::set_process(true);
+        _is_visible = static_cast<Derived*>(this)->is_visible_in_tree();
+
+        if (_autoplay && _is_visible) {
             play();
         } else if (_preload_event) {
             // No need to preload if autoplay is on because event is loaded anyway.
@@ -145,6 +152,8 @@ namespace godot {
 #ifdef TOOLS_ENABLED
         if (Engine::get_singleton()->is_editor_hint()) { return; }
 #endif
+
+        _update_visibility();
 
         if (_event.is_null()) {
             // No event loaded, nothing to do here
@@ -163,6 +172,33 @@ namespace godot {
         }
 
         if (_attached && _event->is_valid()) { set_space_attribute(_event); }
+    }
+
+    template<class Derived, class NodeType>
+    void FmodEventEmitter<Derived, NodeType>::_update_visibility() {
+        const bool is_visible {static_cast<const Derived*>(this)->is_visible_in_tree()};
+
+        if (is_visible == _is_visible) { return; }
+
+        _is_visible = is_visible;
+
+        if (!_is_visible) {
+            // Hiding the emitter stops its event and releases the event instance. This is the same
+            // cleanup that `auto_release` applies when an event finishes on its own.
+            if (_event.is_valid() && _event->is_valid()) { stop(); }
+
+            _unload_event();
+
+            return;
+        }
+
+        if (_autoplay) {
+            play();
+
+            return;
+        }
+
+        if (_preload_event) { _load_event(); }
     }
 
     template<class Derived, class NodeType>
@@ -239,6 +275,11 @@ namespace godot {
     template<class Derived, class NodeType>
     template<bool is_one_shot>
     void FmodEventEmitter<Derived, NodeType>::_play(bool should_start_event) {
+        if (!static_cast<const Derived*>(this)->is_visible_in_tree()) {
+            // A hidden emitter must not play, it is started again when it becomes visible.
+            return;
+        }
+
         Ref<FmodEvent> event;
         if (is_one_shot) {
             event = _create_event();
@@ -267,6 +308,8 @@ namespace godot {
 
         event->start();
         event->release();
+
+        if (!is_one_shot) { _event_started = true; }
     }
 
     template<class Derived, class NodeType>
@@ -380,6 +423,7 @@ namespace godot {
     template<class Derived, class NodeType>
     void FmodEventEmitter<Derived, NodeType>::_load_event() {
         _event = _create_event();
+        _event_started = false;
 
         if (_event.is_null()) {
             return;
@@ -390,6 +434,13 @@ namespace godot {
 
     template<class Derived, class NodeType>
     void FmodEventEmitter<Derived, NodeType>::_unload_event() {
+        if (!_event.is_null() && _event->is_valid() && !_event_started) {
+            // A preloaded instance that never played still holds FMOD resources, release it.
+            // Played instances have already been released and are freed by FMOD when they stop.
+            _event->release();
+        }
+
+        _event_started = false;
         _event_description = Ref<FmodEventDescription>();
         _event = Ref<FmodEvent>();
     }

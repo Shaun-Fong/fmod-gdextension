@@ -12,6 +12,7 @@
 		- Support for autoplay and looping events
 		- Parameter control and callbacks
 		- Integration with Godot's pause system
+		- Visibility-driven playback (hiding the node stops and releases the event)
 		- Preloading options for performance optimization
 
 		The node can be configured to play events automatically when entering the scene tree, or controlled manually through script. It works best with events marked as 3D in FMOD Studio, but can also play 2D events positioned in 3D space.
